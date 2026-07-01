@@ -1,0 +1,1237 @@
+name: airv2x_HEAL_collab_lidar
+active_sensors: &id003
+- lidar
+collaborators: &id002
+- vehicle
+- rsu
+- drone
+ego_type: vehicle
+bevcam_fov: 110
+yaml_parser: load_airv2x_params
+train_params:
+  batch_size: 1
+  epoches: 50
+  eval_freq: 2
+  save_freq: 1
+  max_cav:
+    vehicle: 2
+    rsu: 2
+    drone: 2
+  # Use gradient accumulation to keep effective batch size ~2 while reducing per-iteration GPU memory.
+  accum_steps: 2
+  # Gradient clipping to prevent explosion from spike samples
+  grad_clip: 10.0
+  # Spike detection threshold
+  loss_spike_thresh: 100.0
+device: cuda
+train: true
+root_dir: /data1/wangyh/airdata/AirV2X-Perception/train/train
+validate_dir: /data1/wangyh/airdata/AirV2X-Perception/val/val
+test_dir: /data2/wangyh/test/test
+num_class: 6
+num_anchor: 2
+task: det
+seg_branch: both
+seg_hw: 512
+seg_res: 0.25
+dynamic_class: 7
+static_class: 3
+fusion:
+  core_method: IntermediateFusionDatasetAirv2x
+  args:
+    proj_first: true
+    veh_grid_conf: &id004
+      xbound:
+      - -140.8
+      - 140.8
+      - 0.4
+      ybound:
+      - -40
+      - 40
+      - 0.4
+      zbound:
+      - -10
+      - 30
+      - 20.0
+      ddiscr:
+      - 2
+      - 50
+      - 48
+      mode: LID
+    veh_data_aug_conf: &id005
+      resize_lim:
+      - 0.65
+      - 0.7
+      final_dim:
+      - 360
+      - 640
+      rot_lim:
+      - 0
+      - 0
+      H: 720
+      W: 1280
+      rand_flip: false
+      bot_pct_lim:
+      - 0.0
+      - 0.05
+    rsu_grid_conf: &id006
+      xbound:
+      - -140.8
+      - 140.8
+      - 0.4
+      ybound:
+      - -40
+      - 40
+      - 0.4
+      zbound:
+      - -30
+      - 30
+      - 60.0
+      ddiscr:
+      - 2
+      - 50
+      - 48
+      mode: LID
+    rsu_data_aug_conf: &id007
+      resize_lim:
+      - 0.65
+      - 0.7
+      final_dim:
+      - 360
+      - 640
+      rot_lim:
+      - 0
+      - 0
+      H: 720
+      W: 1280
+      rand_flip: false
+      bot_pct_lim:
+      - 0.0
+      - 0.05
+    drone_grid_conf: &id008
+      xbound:
+      - -140.8
+      - 140.8
+      - 0.4
+      ybound:
+      - -40
+      - 40
+      - 0.4
+      zbound:
+      - -150
+      - -6
+      - 144
+      ddiscr:
+      - 6
+      - 150
+      - 144
+      mode: UD
+    drone_data_aug_conf: &id009
+      resize_lim:
+      - 0.65
+      - 0.7
+      final_dim:
+      - 360
+      - 640
+      rot_lim:
+      - -3.6
+      - 3.6
+      H: 720
+      W: 1280
+      rand_flip: false
+      bot_pct_lim:
+      - 0.0
+      - 0.05
+data_augment:
+- NAME: random_world_flip
+  ALONG_AXIS_LIST:
+  - x
+- NAME: random_world_rotation
+  WORLD_ROT_ANGLE:
+  - -0.78539816
+  - 0.78539816
+- NAME: random_world_scaling
+  WORLD_SCALE_RANGE:
+  - 0.95
+  - 1.05
+preprocess:
+  core_method: SpVoxelPreprocessor
+  ego_type: vehicle
+  args:
+    voxel_size:
+    - 0.4
+    - 0.4
+    - 4
+    max_points_per_voxel: 32
+    max_voxel_train: 32000
+    max_voxel_test: 70000
+  cav_lidar_range: &id001
+  - -140.8
+  - -40
+  - -3
+  - 140.8
+  - 40
+  - 1
+postprocess:
+  core_method: VoxelPostprocessor
+  ego_type: vehicle
+  anchor_args:
+    cav_lidar_range: *id001
+    l: 3.9
+    w: 1.6
+    h: 1.56
+    r:
+    - 0
+    - 90
+    feature_stride: 2
+    num: 2
+    num_class: 6
+  target_args:
+    pos_threshold: 0.6
+    neg_threshold: 0.45
+    score_threshold: 0.05
+    obj_threshold: 0.2
+  order: hwl
+  max_num: 300
+  nms_thresh: 0.15
+model:
+  core_method: airv2x_heal
+  args:
+    collaborators: *id002
+    active_sensors: *id003
+    device: cuda
+    train: true
+    proj_first: true
+    supervise_single: false
+    backbone_fix:
+    - rsu
+    - drone
+    vehicle:
+      modalities:
+      - lidar
+      lidar:
+        voxel_size:
+        - 0.4
+        - 0.4
+        - 4
+        lidar_range:
+        - -140.8
+        - -40
+        - -3
+        - 140.8
+        - 40
+        - 1
+        compression: 0
+        backbone_fix: false
+        pillar_vfe:
+          use_norm: true
+          with_distance: false
+          use_absolute_xyz: true
+          num_filters:
+          - 64
+        point_pillar_scatter:
+          num_features: 64
+      cam:
+        grid_conf: *id004
+        data_aug_conf: *id005
+        img_downsample: 8
+        img_features: 64
+        bevout_feature: 64
+        camera_encoder: EfficientNet
+        use_depth_gt: true
+        depth_supervision: false
+    rsu:
+      modalities:
+      - lidar
+      lidar:
+        voxel_size:
+        - 0.4
+        - 0.4
+        - 60
+        lidar_range:
+        - -140.8
+        - -40
+        - -30
+        - 140.8
+        - 40
+        - 30
+        compression: 0
+        backbone_fix: false
+        pillar_vfe:
+          use_norm: true
+          with_distance: false
+          use_absolute_xyz: true
+          num_filters:
+          - 64
+        point_pillar_scatter:
+          num_features: 64
+      cam:
+        grid_conf: *id006
+        data_aug_conf: *id007
+        img_downsample: 8
+        img_features: 64
+        bevout_feature: 64
+        camera_encoder: EfficientNet
+        use_depth_gt: true
+        depth_supervision: false
+    drone:
+      modalities:
+      - lidar
+      lidar:
+        voxel_size:
+        - 0.4
+        - 0.4
+        - 144
+        lidar_range:
+        - -140.8
+        - -40
+        - -150
+        - 140.8
+        - 40
+        - -6
+        compression: 0
+        backbone_fix: false
+        pillar_vfe:
+          use_norm: true
+          with_distance: false
+          use_absolute_xyz: true
+          num_filters:
+          - 64
+        point_pillar_scatter:
+          num_features: 64
+      cam:
+        grid_conf: *id008
+        data_aug_conf: *id009
+        img_downsample: 8
+        img_features: 64
+        bevout_feature: 64
+        camera_encoder: EfficientNet
+        use_depth_gt: true
+        depth_supervision: false
+    modality_fusion:
+      base_bev_backbone:
+        layer_nums:
+        - 3
+        layer_strides:
+        - 2
+        num_filters:
+        - 64
+      compression: 0
+      shrink_header:
+        use: true
+        kernal_size:
+        - 3
+        stride:
+        - 1
+        padding:
+        - 1
+        dim:
+        - 256
+        input_dim: 384
+    fusion_backbone:
+      resnext: true
+      layer_nums:
+      - 3
+      - 5
+      - 8
+      layer_strides:
+      - 1
+      - 2
+      - 2
+      num_filters:
+      - 64
+      - 128
+      - 256
+      upsample_strides:
+      - 1
+      - 2
+      - 4
+      num_upsample_filter:
+      - 128
+      - 128
+      - 128
+      anchor_number: 2
+    task: det
+    seg_branch: both
+    seg_hw: 512
+    in_head: 256
+    anchor_number: 2
+    num_class: 6
+    dynamic_class: 7
+    static_class: 3
+    cav_range: *id001
+    seg_res: 0.25
+    obj_head: true
+loss:
+  det:
+    core_method: point_pillar_loss_multiclass
+    args:
+      cls_weight: 1.0
+      reg: 2.0
+      obj_weight: 1.0
+      num_class: 6
+  seg:
+    core_method: vanilla_seg_loss
+    args:
+      seg_branch: both
+      d_weights:
+      - 200.0
+      - 200.0
+      - 75.0
+      - 200.0
+      - 200.0
+      - 200.0
+      s_weights: 50.0
+      l_weights: 8.0
+      d_coe: 2.0
+      s_coe: 0.0
+optimizer:
+  core_method: Adam
+  lr: 0.002
+  args:
+    eps: 1e-10
+    weight_decay: 1e-4
+lr_scheduler:
+  core_method: multistep
+  gamma: 0.1
+  step_size:
+  - 30
+  - 50
+data_filter:
+  train:
+    ignore_scenarios: []
+    ignore_frames:
+    - &id010
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '73'
+    - &id011
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '41'
+    - &id012
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '43'
+    - &id013
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '57'
+    - &id014
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '40'
+    - &id015
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '64'
+    - &id016
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '63'
+    - &id017
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '74'
+    - &id018
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '46'
+    - &id019
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '61'
+    - &id020
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '55'
+    - &id021
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '60'
+    - &id022
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '83'
+    - &id023
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '56'
+    - &id024
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '65'
+    - &id025
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '100'
+    - &id026
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '396'
+    - &id027
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '103'
+    - &id028
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '44'
+    - &id029
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '52'
+    - &id030
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '53'
+    - &id031
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '54'
+    - &id032
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '38'
+    - &id033
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '50'
+    - &id034
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '72'
+    - &id035
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '99'
+    - &id036
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '91'
+    - &id037
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '164'
+    - &id038
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '149'
+    - &id039
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '36'
+    - &id040
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '92'
+    - &id041
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '161'
+    - &id042
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '160'
+    - &id043
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '88'
+    - &id044
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '165'
+    - &id045
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '94'
+    - &id046
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '162'
+    - &id047
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '89'
+    - &id048
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '95'
+    - &id049
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '75'
+    - &id050
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '169'
+    - &id051
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '90'
+    - &id052
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '118'
+    - &id053
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '113'
+    - &id054
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '106'
+    - &id055
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '76'
+    - &id056
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '112'
+    - &id057
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '98'
+    - &id058
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '109'
+    - &id059
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '116'
+    - &id060
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '127'
+    - &id061
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '120'
+    - &id062
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '151'
+    - &id063
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '166'
+    - &id064
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '142'
+    - &id065
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '122'
+    - &id066
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '107'
+    - &id067
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '121'
+    - &id068
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '77'
+    - &id069
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '133'
+    - &id070
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '134'
+    - &id071
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '146'
+    - &id072
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '69'
+    - &id073
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '138'
+    - &id074
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '144'
+    - &id075
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '168'
+    - &id076
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '145'
+    - &id077
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '156'
+    - &id078
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '129'
+    - &id079
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '135'
+    - &id080
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '139'
+    - &id081
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '126'
+    - &id082
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '125'
+    - &id083
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '131'
+    - &id084
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '130'
+    - &id085
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '157'
+    - &id086
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '398'
+    - &id087
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '394'
+    - &id088
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '393'
+    - &id089
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '153'
+    - &id090
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '155'
+    - &id091
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '159'
+    - &id092
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '163'
+    - &id093
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '152'
+    - &id094
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '33'
+    - &id095
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '132'
+    - &id096
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '136'
+    - &id097
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '147'
+    - &id098
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '150'
+    - &id099
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '137'
+    - &id100
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '97'
+    - &id101
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '101'
+    - &id102
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '1'
+    - &id103
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '2'
+    - &id104
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '59'
+    - &id105
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '0'
+    - &id106
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '62'
+    - &id107
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '32'
+    - &id108
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '49'
+    - &id109
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '61'
+    - &id110
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '34'
+    - &id111
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '244'
+    - &id112
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '57'
+    - &id113
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '243'
+    - &id114
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '53'
+    - &id115
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '67'
+    - &id116
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '195'
+    - &id117
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '197'
+    - &id118
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '58'
+    - &id119
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '47'
+    - &id120
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '65'
+    - &id121
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '39'
+    - &id122
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '203'
+    - &id123
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '40'
+    - &id124
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '194'
+    - &id125
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '193'
+    - &id126
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '68'
+    - &id127
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '45'
+    - &id128
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '42'
+    - &id129
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '239'
+    - &id130
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '69'
+    - &id131
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '26'
+    - &id132
+      scenario: '2025_05_05_20_05_23'
+      timestamp: '234'
+    - &id133
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '24'
+    - &id134
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '70'
+    - &id135
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '28'
+    - &id136
+      scenario: '2025_05_05_20_05_23'
+      timestamp: '407'
+    - &id137
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '186'
+    - &id138
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '249'
+    - &id139
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '378'
+    - &id140
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '80'
+    - &id141
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '34'
+    - &id142
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '48'
+    - &id143
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '27'
+    - &id144
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '43'
+    - &id145
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '248'
+    - &id146
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '29'
+    - &id147
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '204'
+    - &id148
+      scenario: '2025_05_05_20_05_23'
+      timestamp: '224'
+    - &id149
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '377'
+    - &id150
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '235'
+    - &id151
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '241'
+    - &id152
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '35'
+    - &id153
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '297'
+    - &id154
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '28'
+    - &id155
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '251'
+    - &id156
+      scenario: '2025_05_05_20_05_23'
+      timestamp: '815'
+    - &id157
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '266'
+    - &id158
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '29'
+    - &id159
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '227'
+    - &id160
+      scenario: '2025_05_05_20_05_23'
+      timestamp: '226'
+    - &id161
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '237'
+    - &id162
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '23'
+    - &id163
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '44'
+    - &id164
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '37'
+    - &id165
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '250'
+    - &id166
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '220'
+    - &id167
+      scenario: '2025_05_05_20_05_23'
+      timestamp: '396'
+    - &id168
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '78'
+    - &id169
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '192'
+    - &id170
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '269'
+    - &id171
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '21'
+    - &id172
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '268'
+    - &id173
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '82'
+    - &id174
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '30'
+    - &id175
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '1'
+    - &id176
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '267'
+    - &id177
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '229'
+    - &id178
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '392'
+    - &id179
+      scenario: '2025_05_05_20_05_23'
+      timestamp: '309'
+    - &id180
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '33'
+    - &id181
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '264'
+    - &id182
+      scenario: '2025_05_05_20_05_23'
+      timestamp: '223'
+    - &id183
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '201'
+    - &id184
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '255'
+    - &id185
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '20'
+    - &id186
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '262'
+    - &id187
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '206'
+    - &id188
+      scenario: '2025_05_05_20_05_23'
+      timestamp: '214'
+    - &id189
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '265'
+    - &id190
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '254'
+    - &id191
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '232'
+    - &id192
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '259'
+    - &id193
+      scenario: '2025_05_06_07_58_11'
+      timestamp: '24'
+    - &id194
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '228'
+    - &id195
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '226'
+    - &id196
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '187'
+    - &id197
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '202'
+    - &id198
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '261'
+    - &id199
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '3'
+    - &id200
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '253'
+    - &id201
+      scenario: '2025_05_05_20_05_23'
+      timestamp: '312'
+    - &id202
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '236'
+    - &id203
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '188'
+    - &id204
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '258'
+    - &id205
+      scenario: '2025_05_05_20_05_23'
+      timestamp: '399'
+    - &id206
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '260'
+    - &id207
+      scenario: '2025_05_05_20_05_23'
+      timestamp: '314'
+    - &id208
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '274'
+    - &id209
+      scenario: '2025_05_06_11_03_25'
+      timestamp: '205'
+    # Extra ignore frames: extremely slow validation frames that can cause DDP/NCCL allreduce timeouts.
+    - &id210 {scenario: '2025_05_06_08_16_50', timestamp: '65'}
+    - &id211 {scenario: '2025_05_06_08_16_50', timestamp: '66'}
+    - &id212 {scenario: '2025_05_06_08_16_50', timestamp: '67'}
+    - &id213 {scenario: '2025_05_06_08_16_50', timestamp: '200'}
+    - &id214 {scenario: '2025_05_06_08_16_50', timestamp: '201'}
+    - &id215 {scenario: '2025_05_06_08_16_50', timestamp: '203'}
+    - &id216 {scenario: '2025_05_06_08_16_50', timestamp: '338'}
+    - &id217 {scenario: '2025_05_06_08_16_50', timestamp: '339'}
+    - &id218 {scenario: '2025_05_06_08_16_50', timestamp: '536'}
+    - &id219 {scenario: '2025_05_06_08_16_50', timestamp: '539'}
+    - &id220 {scenario: '2025_05_06_08_16_50', timestamp: '980'}
+    - &id221 {scenario: '2025_05_06_08_16_50', timestamp: '982'}
+    - &id222 {scenario: '2025_05_06_08_16_50', timestamp: '1065'}
+    - &id223 {scenario: '2025_05_06_08_16_50', timestamp: '1066'}
+    - &id224 {scenario: '2025_05_06_08_16_50', timestamp: '1067'}
+  val:
+    ignore_scenarios: []
+    ignore_frames:
+    - *id010
+    - *id011
+    - *id012
+    - *id013
+    - *id014
+    - *id015
+    - *id016
+    - *id017
+    - *id018
+    - *id019
+    - *id020
+    - *id021
+    - *id022
+    - *id023
+    - *id024
+    - *id025
+    - *id026
+    - *id027
+    - *id028
+    - *id029
+    - *id030
+    - *id031
+    - *id032
+    - *id033
+    - *id034
+    - *id035
+    - *id036
+    - *id037
+    - *id038
+    - *id039
+    - *id040
+    - *id041
+    - *id042
+    - *id043
+    - *id044
+    - *id045
+    - *id046
+    - *id047
+    - *id048
+    - *id049
+    - *id050
+    - *id051
+    - *id052
+    - *id053
+    - *id054
+    - *id055
+    - *id056
+    - *id057
+    - *id058
+    - *id059
+    - *id060
+    - *id061
+    - *id062
+    - *id063
+    - *id064
+    - *id065
+    - *id066
+    - *id067
+    - *id068
+    - *id069
+    - *id070
+    - *id071
+    - *id072
+    - *id073
+    - *id074
+    - *id075
+    - *id076
+    - *id077
+    - *id078
+    - *id079
+    - *id080
+    - *id081
+    - *id082
+    - *id083
+    - *id084
+    - *id085
+    - *id086
+    - *id087
+    - *id088
+    - *id089
+    - *id090
+    - *id091
+    - *id092
+    - *id093
+    - *id094
+    - *id095
+    - *id096
+    - *id097
+    - *id098
+    - *id099
+    - *id100
+    - *id101
+    - *id102
+    - *id103
+    - *id104
+    - *id105
+    - *id106
+    - *id107
+    - *id108
+    - *id109
+    - *id110
+    - *id111
+    - *id112
+    - *id113
+    - *id114
+    - *id115
+    - *id116
+    - *id117
+    - *id118
+    - *id119
+    - *id120
+    - *id121
+    - *id122
+    - *id123
+    - *id124
+    - *id125
+    - *id126
+    - *id127
+    - *id128
+    - *id129
+    - *id130
+    - *id131
+    - *id132
+    - *id133
+    - *id134
+    - *id135
+    - *id136
+    - *id137
+    - *id138
+    - *id139
+    - *id140
+    - *id141
+    - *id142
+    - *id143
+    - *id144
+    - *id145
+    - *id146
+    - *id147
+    - *id148
+    - *id149
+    - *id150
+    - *id151
+    - *id152
+    - *id153
+    - *id154
+    - *id155
+    - *id156
+    - *id157
+    - *id158
+    - *id159
+    - *id160
+    - *id161
+    - *id162
+    - *id163
+    - *id164
+    - *id165
+    - *id166
+    - *id167
+    - *id168
+    - *id169
+    - *id170
+    - *id171
+    - *id172
+    - *id173
+    - *id174
+    - *id175
+    - *id176
+    - *id177
+    - *id178
+    - *id179
+    - *id180
+    - *id181
+    - *id182
+    - *id183
+    - *id184
+    - *id185
+    - *id186
+    - *id187
+    - *id188
+    - *id189
+    - *id190
+    - *id191
+    - *id192
+    - *id193
+    - *id194
+    - *id195
+    - *id196
+    - *id197
+    - *id198
+    - *id199
+    - *id200
+    - *id201
+    - *id202
+    - *id203
+    - *id204
+    - *id205
+    - *id206
+    - *id207
+    - *id208
+    - *id209
+    - *id210
+    - *id211
+    - *id212
+    - *id213
+    - *id214
+    - *id215
+    - *id216
+    - *id217
+    - *id218
+    - *id219
+    - *id220
+    - *id221
+    - *id222
+    - *id223
+    - *id224

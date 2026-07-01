@@ -1,0 +1,21 @@
+method,agent_n,latency_ms,gflops,status,error
+HAM,2,6.2874,NA,OK,
+HAM,4,6.1031,NA,OK,
+HAM,6,6.1616,NA,OK,
+HAM,8,6.3021,NA,OK,
+AttFusion,2,0.2776,NA,OK,
+AttFusion,4,0.2903,NA,OK,
+AttFusion,6,0.3841,NA,OK,
+AttFusion,8,0.4398,NA,OK,
+DiscoNet,2,NA,NA,FAIL,build_fail:No module named 'opencood.models.fuse_modules.disco_fuse'
+DiscoNet,4,NA,NA,FAIL,build_fail:No module named 'opencood.models.fuse_modules.disco_fuse'
+DiscoNet,6,NA,NA,FAIL,build_fail:No module named 'opencood.models.fuse_modules.disco_fuse'
+DiscoNet,8,NA,NA,FAIL,build_fail:No module named 'opencood.models.fuse_modules.disco_fuse'
+CoBEVT,2,NA,NA,FAIL,build_fail:No module named 'opencood.models.fuse_modules.swap_fusion_modules'
+CoBEVT,4,NA,NA,FAIL,build_fail:No module named 'opencood.models.fuse_modules.swap_fusion_modules'
+CoBEVT,6,NA,NA,FAIL,build_fail:No module named 'opencood.models.fuse_modules.swap_fusion_modules'
+CoBEVT,8,NA,NA,FAIL,build_fail:No module named 'opencood.models.fuse_modules.swap_fusion_modules'
+V2XViT,2,NA,NA,FAIL,build_fail:No module named 'opencood.models.sub_modules.v2xvit_basic'
+V2XViT,4,NA,NA,FAIL,build_fail:No module named 'opencood.models.sub_modules.v2xvit_basic'
+V2XViT,6,NA,NA,FAIL,build_fail:No module named 'opencood.models.sub_modules.v2xvit_basic'
+V2XViT,8,NA,NA,FAIL,build_fail:No module named 'opencood.models.sub_modules.v2xvit_basic'
